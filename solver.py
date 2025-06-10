@@ -3,7 +3,7 @@ import pprint
 
 class Network:
     """
-    Represents a network of passive resistors.
+    Represents a network of passive resistors. Nodes are numbered starting at 0.
     """
 
     def __init__(self, num_nodes):
@@ -50,11 +50,12 @@ def ohms_law_equations(network):
 
 def kcl_equations(network):
     """
-    Returns a list of KCL equations from the resistive network.
+    Returns a list of all KCL equations from the resistive network.
     Input: network is a Network instance.
     Output: a list of equations, which are lists of elements that sum to 0
         elements in each equation list can be numerical values, or (variable, coefficient).
         current variables are tuples of vertices (smaller vtx, larger vtx)
+        note that these are ordered in increasing node number.
     """
     n = network.get_num_nodes()
     equations = []
@@ -70,52 +71,59 @@ def kcl_equations(network):
         equations.append(equation)
     return equations
 
-def node_analysis(equations, pos_node, neg_node, voltage):
+def equivalent_resistance(network, pos_node, neg_node, voltage):
     """
-    Returns an assignment of variables such that the input equations are satisfied.
-    Input: equations is a list of equations, which are lists of elements that sum to 0
-        elements in each equation list can be numerical, or (variable, coefficient)
-        pos_node and neg_node are the nodes to be treated as the high and low ends
-        of the input voltage.
-    Output: a valid assignment to all variables to satisfy all equations.
+    Performs a node analysis on the network to determine the equivalent resistance of the network.
+    Input: network is a Network instance.
+    Output: the equivalent resistance of the network.
     """
     # collect variables
     vars = set()
+    kcl_eqns = kcl_equations(network)
+    ohms_law_eqns = ohms_law_equations(network)
+    equations = kcl_eqns + ohms_law_eqns
     for eqn in equations:
         vars = vars.union(set([clause[0] for clause in eqn]))
     vars_vector = list(vars)
     n = len(vars_vector)
-    ix_lookup = {vars_vector[i] : i for i in range(n)}
+    var_columns = {vars_vector[i] : i for i in range(n)}
 
     # now create and fill in the matrix constraints
-    # we must also enforce both pos_node = voltage and neg_node = 0
     b = [0 for i in range(n)]
-    b.append(0)
-    b.append(voltage)
-
-    print(len(b), 'b len')
-    print(b)
-
-    A = [[0 for i in range(n)] for j in range(len(equations)+2)]
-
-    print(len(A), 'vert size')
-    print(len(A[0]), 'hor size')
-
+    A = [[0 for i in range(n)] for j in range(n)]
     for i, eqn in enumerate(equations):
         for clause in eqn:
-            var_column = ix_lookup[clause[0]]
+            var_column = var_columns[clause[0]]
             A[i][var_column] = clause[1]
-    pos_ix = ix_lookup[pos_node]
-    neg_ix = ix_lookup[neg_node]
-    A[-2][neg_ix] = 1
-    A[-1][pos_ix] = 1
+
+    # replace the positive and negative node KCL eqns with voltage constraints
+    # note this relies on equations[i] = kcl_eqns[i] being KCL at node i
+    neg_ix = var_columns[neg_node]
+    ground_constraint = [0 for i in range(n)]
+    ground_constraint[neg_ix] = 1
+    A[neg_node] = ground_constraint
+
+    pos_ix = var_columns[pos_node]
+    positive_constraint = [0 for i in range(n)]
+    positive_constraint[pos_ix] = 1
+    A[pos_node] = positive_constraint
+    b[pos_node] = voltage
 
     pprint.pprint(A)
-
+    print(b)
 
     x = np.linalg.solve(A, b)
+    is_exact = np.allclose(A @ x, b)
+    print(is_exact)
 
     # use total output current to determine equivalent resistance
+    # for var in vars_vector:
+    #     if type(var) == tuple and pos_node in var:
+
+
+
+
+    return x, vars_vector
 
 
 
@@ -137,5 +145,4 @@ if __name__=="__main__":
     ohms = ohms_law_equations(network)
     print(ohms)
 
-    equations = kcl + ohms
-    print(node_analysis(equations, 0, 1, 10))
+    print(equivalent_resistance(network, 0, 1, 10))
