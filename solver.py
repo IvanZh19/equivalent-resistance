@@ -1,3 +1,6 @@
+import numpy as np
+import pprint
+
 class Network:
     """
     Represents a network of passive resistors.
@@ -67,6 +70,55 @@ def kcl_equations(network):
         equations.append(equation)
     return equations
 
+def node_analysis(equations, pos_node, neg_node, voltage):
+    """
+    Returns an assignment of variables such that the input equations are satisfied.
+    Input: equations is a list of equations, which are lists of elements that sum to 0
+        elements in each equation list can be numerical, or (variable, coefficient)
+        pos_node and neg_node are the nodes to be treated as the high and low ends
+        of the input voltage.
+    Output: a valid assignment to all variables to satisfy all equations.
+    """
+    # collect variables
+    vars = set()
+    for eqn in equations:
+        vars = vars.union(set([clause[0] for clause in eqn]))
+    vars_vector = list(vars)
+    n = len(vars_vector)
+    ix_lookup = {vars_vector[i] : i for i in range(n)}
+
+    # now create and fill in the matrix constraints
+    # we must also enforce both pos_node = voltage and neg_node = 0
+    b = [0 for i in range(n)]
+    b.append(0)
+    b.append(voltage)
+
+    print(len(b), 'b len')
+    print(b)
+
+    A = [[0 for i in range(n)] for j in range(len(equations)+2)]
+
+    print(len(A), 'vert size')
+    print(len(A[0]), 'hor size')
+
+    for i, eqn in enumerate(equations):
+        for clause in eqn:
+            var_column = ix_lookup[clause[0]]
+            A[i][var_column] = clause[1]
+    pos_ix = ix_lookup[pos_node]
+    neg_ix = ix_lookup[neg_node]
+    A[-2][neg_ix] = 1
+    A[-1][pos_ix] = 1
+
+    pprint.pprint(A)
+
+
+    x = np.linalg.solve(A, b)
+
+    # use total output current to determine equivalent resistance
+
+
+
 
 
 
@@ -79,7 +131,11 @@ if __name__=="__main__":
     network.add_resistor(1, 2, 20)
     network.add_resistor(2, 0, 30)
 
+    kcl = kcl_equations(network)
+    print(kcl)
 
-    print(kcl_equations(network))
+    ohms = ohms_law_equations(network)
+    print(ohms)
 
-    print(ohms_law_equations(network))
+    equations = kcl + ohms
+    print(node_analysis(equations, 0, 1, 10))
