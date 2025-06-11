@@ -1,9 +1,9 @@
 import numpy as np
-import pprint
 
 class Network:
     """
     Represents a network of passive resistors. Nodes are numbered starting at 0.
+    Parallel resistors are immediately simplified into the network.
     """
 
     def __init__(self, num_nodes):
@@ -15,8 +15,13 @@ class Network:
         self.num_nodes = num_nodes
 
     def add_resistor(self, node1, node2, resistance):
-        self.matrix[node1][node2] = resistance
-        self.matrix[node2][node1] = resistance
+        if self.matrix[node1][node2] is None:
+            new_resistance = resistance
+        else:
+            first_resistance = self.matrix[node1][node2]
+            new_resistance = (resistance * first_resistance)/(resistance + first_resistance)
+        self.matrix[node1][node2] = new_resistance
+        self.matrix[node2][node1] = new_resistance
 
     def del_resistor(self, node1, node2):
         self.matrix[node1][node2] = None
@@ -71,7 +76,7 @@ def kcl_equations(network):
         equations.append(equation)
     return equations
 
-def equivalent_resistance(network, pos_node, neg_node, voltage):
+def equivalent_resistance(network, pos_node, neg_node):
     """
     Performs a node analysis on the network to determine the equivalent resistance of the network.
     Input: network is a Network instance.
@@ -106,30 +111,25 @@ def equivalent_resistance(network, pos_node, neg_node, voltage):
     pos_ix = var_columns[pos_node]
     positive_constraint = [0 for i in range(n)]
     positive_constraint[pos_ix] = 1
-    A[pos_node] = positive_constraint
+    voltage = 10
     b[pos_node] = voltage
-
-    pprint.pprint(A)
-    print(b)
+    A[pos_node] = positive_constraint
 
     x = np.linalg.solve(A, b)
     is_exact = np.allclose(A @ x, b)
     print(is_exact)
 
     # use total output current to determine equivalent resistance
-    # for var in vars_vector:
-    #     if type(var) == tuple and pos_node in var:
+    total_current = 0
+    for i in range(n):
+        var = vars_vector[i]
+        if type(var) == tuple:
+            if var[0] == pos_node:
+                total_current += x[i]
+            elif var[1] == pos_node:
+                total_current -= x[i]
 
-
-
-
-    return x, vars_vector
-
-
-
-
-
-
+    return voltage/total_current
 
 
 
@@ -138,11 +138,16 @@ if __name__=="__main__":
     network.add_resistor(0, 1, 10)
     network.add_resistor(1, 2, 20)
     network.add_resistor(2, 0, 30)
+    print(equivalent_resistance(network, 0, 1), 'network 1')
 
-    kcl = kcl_equations(network)
-    print(kcl)
+    network = Network(5)
+    network.add_resistor(0, 1, 10)
+    network.add_resistor(1, 2, 20)
+    network.add_resistor(2, 3, 30)
+    network.add_resistor(3, 4, 40)
+    print(equivalent_resistance(network, 0, 4), 'network 2')
 
-    ohms = ohms_law_equations(network)
-    print(ohms)
-
-    print(equivalent_resistance(network, 0, 1, 10))
+    network = Network(2)
+    network.add_resistor(0, 1, 40)
+    network.add_resistor(0, 1, 20)
+    print(equivalent_resistance(network, 0, 1), 'network 3')
